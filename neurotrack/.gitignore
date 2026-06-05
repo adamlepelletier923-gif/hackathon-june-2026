@@ -1,0 +1,13 @@
+.venv/
+__pycache__/
+*.pyc
+node_modules/
+frontend/dist/
+models/
+# caches lourds regenerables (on garde data/web_nii d'un patient pour la demo)
+data/nii_cache/
+data/seg_cache/
+data/cmp_cache/*/*.npz
+data/evolution_*/
+data/namelist.json
+data/*.png

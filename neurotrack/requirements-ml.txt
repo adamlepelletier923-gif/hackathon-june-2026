@@ -1,0 +1,8 @@
+numpy
+nibabel
+remotezip
+matplotlib
+torch
+monai
+fire
+huggingface_hub
