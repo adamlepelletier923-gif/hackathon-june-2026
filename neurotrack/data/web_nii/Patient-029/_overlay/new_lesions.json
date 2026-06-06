@@ -1,0 +1,72 @@
+{
+ "week-000-1": {
+  "new_lesion": false,
+  "n_new": 0,
+  "new_vol": 0.0
+ },
+ "week-000-2": {
+  "new_lesion": true,
+  "n_new": 1,
+  "new_vol": 1.6
+ },
+ "week-010": {
+  "new_lesion": false,
+  "n_new": 0,
+  "new_vol": 0.0
+ },
+ "week-022": {
+  "new_lesion": false,
+  "n_new": 0,
+  "new_vol": 0.0
+ },
+ "week-033": {
+  "new_lesion": false,
+  "n_new": 0,
+  "new_vol": 0.0
+ },
+ "week-045": {
+  "new_lesion": false,
+  "n_new": 0,
+  "new_vol": 0.0
+ },
+ "week-059": {
+  "new_lesion": false,
+  "n_new": 0,
+  "new_vol": 0.0
+ },
+ "week-100": {
+  "new_lesion": false,
+  "n_new": 0,
+  "new_vol": 0.0
+ },
+ "week-112": {
+  "new_lesion": false,
+  "n_new": 0,
+  "new_vol": 0.0
+ },
+ "week-152": {
+  "new_lesion": false,
+  "n_new": 0,
+  "new_vol": 0.0
+ },
+ "week-165": {
+  "new_lesion": false,
+  "n_new": 0,
+  "new_vol": 0.0
+ },
+ "week-207": {
+  "new_lesion": false,
+  "n_new": 0,
+  "new_vol": 0.0
+ },
+ "week-223": {
+  "new_lesion": true,
+  "n_new": 1,
+  "new_vol": 2.0
+ },
+ "week-255": {
+  "new_lesion": true,
+  "n_new": 1,
+  "new_vol": 29.1
+ }
+}

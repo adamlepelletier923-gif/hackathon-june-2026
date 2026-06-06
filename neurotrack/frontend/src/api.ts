@@ -6,6 +6,13 @@ export type Exam = {
   n_slices: number | null
   rano_expert: string
   verdict_auto: string
+  verdict_why: string
+  new_lesion: boolean
+  new_vol: number | null
+  ref_baseline: number
+  ref_nadir: number | null
+  is_baseline: boolean
+  is_nadir: boolean
   delta_pct: number | null
   velocity: number | null
   has_nii: boolean
@@ -66,5 +73,36 @@ export function timeColor(t: number): [number, number, number] {
 
 export async function getReport(id: string, week: string): Promise<{ text: string }> {
   const r = await fetch(`/api/patients/${id}/report/${week}`)
+  return r.json()
+}
+
+export type SegResult = { patient: string; week: string; n_exams: number; vol: number; n_slices: number }
+
+export async function segmentExample(patient: string, week: number): Promise<SegResult> {
+  const r = await fetch('/api/segment/example', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ patient, week }),
+  })
+  if (!r.ok) throw new Error((await r.json().catch(() => ({}))).detail || 'segmentation impossible')
+  return r.json()
+}
+
+export type SeriesResult = { patient: string; n_exams: number; weeks: string[] }
+
+export async function segmentExampleSeries(patient?: string): Promise<SeriesResult> {
+  const r = await fetch('/api/segment/example_series', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(patient ? { patient } : {}),
+  })
+  if (!r.ok) throw new Error((await r.json().catch(() => ({}))).detail || 'segmentation impossible')
+  return r.json()
+}
+
+export async function segmentUpload(patient: string, week: number, files: { t1c: File; t1: File; t2: File; flair: File }): Promise<SegResult> {
+  const fd = new FormData()
+  fd.append('patient', patient); fd.append('week', String(week))
+  fd.append('t1c', files.t1c); fd.append('t1', files.t1); fd.append('t2', files.t2); fd.append('flair', files.flair)
+  const r = await fetch('/api/segment', { method: 'POST', body: fd })
+  if (!r.ok) throw new Error((await r.json().catch(() => ({}))).detail || 'segmentation impossible')
   return r.json()
 }

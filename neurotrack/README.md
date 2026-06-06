@@ -30,11 +30,26 @@ IRM (4 sequences) --> modele pre-entraine (MONAI BraTS) --> masque tumoral
 - Donnees de demonstration : dataset public LUMIERE (gliomes, IRM longitudinales avec
   cotation RANO experte). On valide notre segmentation contre les masques de reference
   du dataset (Dice ~0.87).
-- Verdict RANO volumetrique simplifie sur le volume rehaussant (PD/SD/PR/CR).
+- Verdict RANO volumetrique simplifie sur le volume rehaussant (PD/SD/PR/CR), avec la
+  raison affichee (hausse vs nadir, baisse vs baseline...). Ne lit que les volumes, jamais
+  une cotation externe : tourne tel quel sur un patient jamais cote.
+- Detection d'apparition d'une nouvelle lesion rehaussante (composantes connexes en espace
+  atlas commun) -> declenche un PD, autre critere RANO independant du volume.
+
+## Ajouter une IRM depuis l'app (segmentation in-app)
+
+Le bouton "Ajouter une IRM" televerse 4 sequences (T1c, T1, T2, FLAIR) deja recalees et
+skull-strippees, le backend lance le modele MONAI a la demande, et l'examen devient un
+patient suivi (ecrit manifest.json + .nii.gz, apparait dans la liste). Reajouter le meme
+nom de patient avec une autre semaine ajoute un point a sa timeline.
+
+Cela demande les dependances ML (requirements-ml.txt) cote backend. Sans elles, les patients
+deja en cache marchent, mais /api/segment renvoie une erreur. Le modele attend des images
+pretraitees comme LUMIERE : un DICOM brut non recale ne marchera pas tel quel.
 
 ## Lancer l'app web (rapide, sans GPU)
 
-Les donnees de demonstration d'un patient sont deja incluses, l'app tourne directement.
+Les donnees de demonstration de plusieurs patients sont deja incluses, l'app tourne directement.
 
 Prerequis : Python 3.11+ et Node 20+.
 
@@ -51,9 +66,11 @@ cd frontend && npm install && cd ..
 `run.sh` lance le backend (FastAPI, port 8077) et le frontend (Vite). Ouvre l'URL
 affichee par Vite (http://localhost:5173). Ctrl-C arrete les deux.
 
-Dans l'app : choisir un patient, parcourir les examens (slider / fleches), basculer le
-cerveau en 2D/3D, comparer notre modele au dataset, et activer le mode "superposition"
-pour voir la tumeur evoluer dans le temps (couleurs bleu=ancien -> rouge=recent).
+Dans l'app : choisir un patient, parcourir les examens (slider / fleches) ou lancer la
+lecture automatique de la trajectoire, lire le ruban RANO sous la courbe (verdict par
+examen) avec ses raisons, basculer le cerveau en 2D/3D, comparer notre modele au dataset,
+activer la "superposition" pour voir la tumeur evoluer (bleu=ancien -> rouge=recent, choix
+des examens superposes), et relire/corriger/exporter le compte-rendu auto-genere.
 
 ## Regenerer les donnees / ajouter un patient (necessite GPU + telechargement)
 
@@ -66,9 +83,10 @@ Le pipeline complet (segmentation par le modele) demande les dependances lourdes
 Puis, pour un patient du dataset LUMIERE :
 
 ```bash
-.venv/bin/python precompute_seg.py --patient Patient-031   # segmente chaque examen (GPU)
-.venv/bin/python export_nii.py     --patient Patient-031   # exporte les nii pour le viewer
-.venv/bin/python build_overlay.py  --patient Patient-031   # masques atlas pour la superposition
+.venv/bin/python precompute_seg.py     --patient Patient-031   # segmente chaque examen (GPU)
+.venv/bin/python export_nii.py         --patient Patient-031   # exporte les nii pour le viewer
+.venv/bin/python build_overlay.py      --patient Patient-031   # masques atlas pour la superposition
+.venv/bin/python detect_new_lesions.py --patient Patient-031   # flag nouvelle lesion (espace atlas)
 ```
 
 Les images sont tirees a la demande du dataset LUMIERE (range requests, pas de
@@ -77,17 +95,19 @@ telechargement des 32 Go).
 ## Structure
 
 ```
-backend/app.py        API FastAPI (timeline, verdict RANO, overlay, compte-rendu) + sert les .nii.gz
+backend/app.py        API FastAPI (timeline, verdict RANO, overlay, compte-rendu, segmentation in-app) + sert les .nii.gz
+backend/seg.py        segmentation par le modele MONAI dans le backend (chargement paresseux), a la demande
 frontend/             app React (Vite + Tailwind + ECharts + NiiVue)
 segment.py            segmentation par modele pre-entraine + comparaison a la reference
 precompute_seg.py     segmente tous les examens d'un patient et met en cache
 export_nii.py         exporte les .nii.gz consommes par le viewer 3D
 build_overlay.py      masques en espace atlas commun pour la superposition multi-dates
+detect_new_lesions.py flag d'apparition d'une nouvelle lesion (composantes connexes)
 visualize.py          viewer local IRM + masque (matplotlib)
 compare_viewer.py     viewer local IRM | seg dataset | seg custom
 suivi_5_patients.ipynb notebook d'exploration du suivi longitudinal
 PLAN.md               plan d'action du projet
-data/                 donnees de demo (LUMIERE) : CSV cotations + nii d'un patient
+data/                 donnees de demo (LUMIERE) : CSV cotations + nii de plusieurs patients
 ```
 
 ## Limites honnetes
@@ -96,7 +116,7 @@ data/                 donnees de demo (LUMIERE) : CSV cotations + nii d'un patie
   franches mais diverge de l'expert au milieu du suivi, la ou RANO s'appuie aussi sur
   le FLAIR, les nouvelles lesions et la clinique. Decision-support, pas diagnostic.
 - On ne distingue pas vraie progression et pseudoprogression (hors scope).
-- La superposition multi-dates utilise les masques du dataset en espace atlas commun
-  (deja co-registres). Superposer NOS masques demanderait un recalage inter-examens.
+- La superposition multi-dates ET la detection de nouvelle lesion utilisent les masques du
+  dataset en espace atlas commun (deja co-registres). Faire la meme chose sur NOS masques
+  demanderait un recalage inter-examens (hors scope hackathon).
 - La segmentation est un modele pre-entraine generaliste, pas valide cliniquement.
-```

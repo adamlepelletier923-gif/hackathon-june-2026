@@ -1,0 +1,110 @@
+{
+ "week-000": {
+  "week": "week-000",
+  "n_slices": 156,
+  "vol_gt": 11.0,
+  "vol_our": 11.2
+ },
+ "week-002": {
+  "week": "week-002",
+  "n_slices": 147,
+  "vol_gt": 0.5,
+  "vol_our": 0.0
+ },
+ "week-015": {
+  "week": "week-015",
+  "n_slices": 151,
+  "vol_gt": 1.4,
+  "vol_our": 1.7
+ },
+ "week-018": {
+  "week": "week-018",
+  "n_slices": 138,
+  "vol_gt": 0.2,
+  "vol_our": 0.0
+ },
+ "week-032": {
+  "week": "week-032",
+  "n_slices": 156,
+  "vol_gt": 0.0,
+  "vol_our": 0.1
+ },
+ "week-046": {
+  "week": "week-046",
+  "n_slices": 155,
+  "vol_gt": 0.0,
+  "vol_our": 0.0
+ },
+ "week-059": {
+  "week": "week-059",
+  "n_slices": 154,
+  "vol_gt": 0.0,
+  "vol_our": 0.0
+ },
+ "week-074": {
+  "week": "week-074",
+  "n_slices": 139,
+  "vol_gt": 0.0,
+  "vol_our": 0.0
+ },
+ "week-087": {
+  "week": "week-087",
+  "n_slices": 152,
+  "vol_gt": 0.0,
+  "vol_our": 0.0
+ },
+ "week-105": {
+  "week": "week-105",
+  "n_slices": 150,
+  "vol_gt": 0.0,
+  "vol_our": 0.0
+ },
+ "week-123": {
+  "week": "week-123",
+  "n_slices": 152,
+  "vol_gt": 0.0,
+  "vol_our": 0.1
+ },
+ "week-142": {
+  "week": "week-142",
+  "n_slices": 146,
+  "vol_gt": 0.4,
+  "vol_our": 0.5
+ },
+ "week-148": {
+  "week": "week-148",
+  "n_slices": 149,
+  "vol_gt": 0.0,
+  "vol_our": 0.0
+ },
+ "week-151": {
+  "week": "week-151",
+  "n_slices": 152,
+  "vol_gt": 0.1,
+  "vol_our": 0.0
+ },
+ "week-165": {
+  "week": "week-165",
+  "n_slices": 148,
+  "vol_gt": 0.2,
+  "vol_our": 0.0
+ },
+ "week-170": {
+  "week": "week-170",
+  "n_slices": 149,
+  "vol_gt": 0.0,
+  "vol_our": 0.6
+ },
+ "week-184": {
+  "week": "week-184",
+  "n_slices": 154,
+  "vol_gt": 18.3,
+  "vol_our": 13.2
+ },
+ "week-190": {
+  "week": "week-190",
+  "n_slices": 151,
+  "vol_gt": 40.6,
+  "vol_our": 29.6
+ }
+}

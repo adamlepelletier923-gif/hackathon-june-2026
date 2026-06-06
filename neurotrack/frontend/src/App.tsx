@@ -3,6 +3,8 @@ import { getPatients, getTimeline, getReport, getOverlay, timeColor, VERDICT_COL
 import type { Timeline, Overlay } from './api'
 import VolumeChart from './components/VolumeChart'
 import BrainViewer from './components/BrainViewer'
+import RanoRibbon from './components/RanoRibbon'
+import AddIrmModal from './components/AddIrmModal'
 
 function Kpi({ label, value, sub, color }: { label: string; value: string; sub?: string; color?: string }) {
   return (
@@ -23,6 +25,18 @@ function Toggle({ on, left, right, onChange }: { on: boolean; left: string; righ
   )
 }
 
+function Card({ title, right, children }: { title: string; right?: React.ReactNode; children: React.ReactNode }) {
+  return (
+    <section className="rounded-2xl bg-slate-900/40 border border-slate-800 p-4">
+      <div className="flex items-center justify-between mb-3 gap-2 flex-wrap">
+        <h2 className="text-sm font-medium text-slate-300">{title}</h2>
+        {right}
+      </div>
+      {children}
+    </section>
+  )
+}
+
 export default function App() {
   const [patients, setPatients] = useState<string[]>([])
   const [current, setCurrent] = useState<string | null>(null)
@@ -33,6 +47,11 @@ export default function App() {
   const [report, setReport] = useState('')
   const [overlay, setOverlay] = useState<Overlay | null>(null)
   const [overlayMode, setOverlayMode] = useState(false)
+  const [playing, setPlaying] = useState(false)
+  const [edited, setEdited] = useState(false)
+  const [copied, setCopied] = useState(false)
+  const [picked, setPicked] = useState<Set<string>>(new Set())
+  const [showAdd, setShowAdd] = useState(false)
 
   useEffect(() => {
     getPatients().then((ps) => {
@@ -43,6 +62,7 @@ export default function App() {
 
   useEffect(() => {
     if (!current) return
+    setPlaying(false)
     getTimeline(current).then((t) => {
       setTl(t)
       setSel(Math.max(t.exams.length - 1, 0))
@@ -50,21 +70,65 @@ export default function App() {
     getOverlay(current).then(setOverlay).catch(() => setOverlay(null))
   }, [current])
 
+  useEffect(() => {
+    if (!playing || !tl) return
+    if (sel >= tl.exams.length - 1) { setPlaying(false); return }
+    const id = setTimeout(() => setSel((i) => i + 1), 850)
+    return () => clearTimeout(id)
+  }, [playing, sel, tl])
+
+  const togglePlay = () => {
+    if (!tl) return
+    if (!playing && sel >= tl.exams.length - 1) setSel(0)
+    setPlaying((p) => !p)
+  }
+  const stepTo = (i: number) => { setPlaying(false); setSel(i) }
+
   const s = tl?.summary
   const exam = tl?.exams[sel]
 
   const measur = overlay ? overlay.masks.filter((m) => m.vol >= 2) : []
-  const layers = measur.map((m, i) => ({
-    url: m.url, week: m.week,
-    rgb: timeColor(measur.length > 1 ? i / (measur.length - 1) : 0) as [number, number, number],
-  }))
 
   useEffect(() => {
-    if (current && exam) getReport(current, exam.week).then((r) => setReport(r.text)).catch(() => setReport(''))
+    if (!measur.length) { setPicked(new Set()); return }
+    const k = Math.min(5, measur.length)
+    const idxs = Array.from({ length: k }, (_, j) => Math.round((j * (measur.length - 1)) / (k - 1 || 1)))
+    setPicked(new Set(idxs.map((j) => measur[j].week)))
+  }, [overlay])
+
+  const toggleWeek = (w: string) =>
+    setPicked((prev) => { const n = new Set(prev); n.has(w) ? n.delete(w) : n.add(w); return n })
+
+  const layers = measur
+    .map((m, i) => ({ m, i }))
+    .filter(({ m }) => picked.has(m.week))
+    .map(({ m, i }) => ({
+      url: m.url, week: m.week,
+      rgb: timeColor(measur.length > 1 ? i / (measur.length - 1) : 0) as [number, number, number],
+    }))
+
+  useEffect(() => {
+    if (current && exam) getReport(current, exam.week).then((r) => { setReport(r.text); setEdited(false) }).catch(() => setReport(''))
   }, [current, exam?.week])
 
+  const copyReport = () => {
+    navigator.clipboard?.writeText(report)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 1500)
+  }
+  const downloadReport = () => {
+    const blob = new Blob([report], { type: 'text/plain;charset=utf-8' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `CR_${current}_${exam?.week ?? ''}.txt`
+    a.click()
+    URL.revokeObjectURL(url)
+  }
+
+  const vd = exam?.verdict_auto
   return (
-    <div className="flex h-screen">
+    <div className="flex h-screen bg-slate-950 text-slate-100">
       <aside className="w-60 shrink-0 border-r border-slate-800 bg-slate-950 p-4 flex flex-col gap-4">
         <div>
           <div className="text-lg font-bold tracking-tight">Neuro<span className="text-sky-400">Track</span></div>
@@ -81,98 +145,141 @@ export default function App() {
           ))}
           {!patients.length && <div className="text-xs text-slate-600">chargement…</div>}
         </div>
+        <button onClick={() => setShowAdd(true)}
+          className="mt-auto px-3 py-2 rounded-lg text-sm bg-sky-500/15 text-sky-300 border border-sky-500/30 hover:bg-sky-500/25">
+          + Ajouter une IRM
+        </button>
       </aside>
 
-      <main className="flex-1 flex flex-col gap-3 p-5 overflow-hidden">
-        <header className="flex items-center justify-between">
-          <div>
-            <h1 className="text-xl font-semibold">{current ?? '—'}</h1>
-            <div className="text-sm text-slate-500">{s ? `${s.n_exams} examens de suivi` : ''}</div>
-          </div>
-          {s && (
-            <div className="px-4 py-2 rounded-xl font-bold text-sm tracking-wide"
-              style={{ background: (VERDICT_COLOR[s.current_verdict] || '#444') + '22', color: VERDICT_COLOR[s.current_verdict] || '#fff', border: `1px solid ${VERDICT_COLOR[s.current_verdict] || '#444'}55` }}>
-              {VERDICT_LABEL[s.current_verdict] || s.current_verdict}
+      <main className="flex-1 overflow-y-auto">
+        <div className="max-w-[1500px] mx-auto p-6 flex flex-col gap-5">
+          <header className="flex items-center justify-between">
+            <div>
+              <h1 className="text-2xl font-semibold">{current ?? '—'}</h1>
+              <div className="text-sm text-slate-500">{s ? `${s.n_exams} examens de suivi` : ''}{exam ? ` · examen ${exam.week}` : ''}</div>
+            </div>
+            {vd && (
+              <div className="px-5 py-2.5 rounded-xl font-bold tracking-wide"
+                style={{ background: (VERDICT_COLOR[vd] || '#444') + '22', color: VERDICT_COLOR[vd] || '#fff', border: `1px solid ${VERDICT_COLOR[vd] || '#444'}55` }}>
+                {VERDICT_LABEL[vd] || vd}
+              </div>
+            )}
+          </header>
+
+          {exam && (
+            <div className="flex gap-4">
+              <Kpi label="volume" value={`${exam.vol_custom} mL`} sub="tumeur rehaussante" />
+              <Kpi label="variation" value={exam.delta_pct == null ? '—' : `${exam.delta_pct > 0 ? '+' : ''}${exam.delta_pct}%`} sub="vs examen précédent"
+                color={exam.delta_pct != null && exam.delta_pct > 0 ? '#ef4444' : exam.delta_pct != null ? '#22c55e' : undefined} />
+              <Kpi label="vitesse" value={exam.velocity == null ? '—' : `${exam.velocity} mL/mois`} sub="croissance récente" />
+              <Kpi label="pic du suivi" value={s ? `${s.peak_vol} mL` : '—'} sub={s?.peak_week} />
             </div>
           )}
-        </header>
 
-        {s && (
-          <div className="flex gap-3">
-            <Kpi label="volume actuel" value={`${s.current_vol} mL`} sub="tumeur rehaussante" />
-            <Kpi label="variation" value={s.current_delta_pct == null ? '—' : `${s.current_delta_pct > 0 ? '+' : ''}${s.current_delta_pct}%`} sub="vs examen précédent"
-              color={s.current_delta_pct != null && s.current_delta_pct > 0 ? '#ef4444' : '#22c55e'} />
-            <Kpi label="vitesse" value={s.current_velocity == null ? '—' : `${s.current_velocity} mL/mois`} sub="croissance récente" />
-            <Kpi label="pic" value={`${s.peak_vol} mL`} sub={s.peak_week} />
-          </div>
-        )}
+          {tl && tl.exams.length > 0 && (
+            <div className="flex items-center gap-3 rounded-xl bg-slate-900/60 border border-slate-800 px-4 py-2.5">
+              <button onClick={togglePlay}
+                className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-sky-500/20 text-sky-200 border border-sky-500/30 text-sm font-medium hover:bg-sky-500/30">
+                <span className="text-xs">{playing ? '❚❚' : '▶'}</span>{playing ? 'Pause' : 'Lecture'}
+              </button>
+              <button onClick={() => stepTo(Math.max(0, sel - 1))} disabled={sel === 0}
+                className="px-2 py-1 rounded-md bg-slate-800 text-slate-200 disabled:opacity-30 text-sm">◀</button>
+              <input type="range" min={0} max={tl.exams.length - 1} value={sel}
+                onChange={(e) => stepTo(Number(e.target.value))} className="flex-1 accent-sky-400" />
+              <button onClick={() => stepTo(Math.min(tl.exams.length - 1, sel + 1))} disabled={sel === tl.exams.length - 1}
+                className="px-2 py-1 rounded-md bg-slate-800 text-slate-200 disabled:opacity-30 text-sm">▶</button>
+              <div className="text-xs text-slate-400 w-32 text-right tabular-nums">{exam?.week} ({sel + 1}/{tl.exams.length})</div>
+            </div>
+          )}
 
-        {tl && tl.exams.length > 0 && (
-          <div className="flex items-center gap-3 rounded-xl bg-slate-900/40 border border-slate-800 px-3 py-2">
-            <button onClick={() => setSel(Math.max(0, sel - 1))} disabled={sel === 0}
-              className="px-2 py-1 rounded-md bg-slate-800 text-slate-200 disabled:opacity-30 text-sm">◀</button>
-            <input type="range" min={0} max={tl.exams.length - 1} value={sel}
-              onChange={(e) => setSel(Number(e.target.value))} className="flex-1 accent-sky-400" />
-            <button onClick={() => setSel(Math.min(tl.exams.length - 1, sel + 1))} disabled={sel === tl.exams.length - 1}
-              className="px-2 py-1 rounded-md bg-slate-800 text-slate-200 disabled:opacity-30 text-sm">▶</button>
-            <div className="text-xs text-slate-400 w-32 text-right">{exam?.week} ({sel + 1}/{tl.exams.length})</div>
-          </div>
-        )}
+          <Card title="Trajectoire du volume tumoral rehaussant et réponse RANO">
+            {tl && (
+              <>
+                <div className="h-[340px]"><VolumeChart exams={tl.exams} selected={sel} onSelect={stepTo} /></div>
+                <div className="mt-2"><RanoRibbon exams={tl.exams} selected={sel} onSelect={stepTo} /></div>
+              </>
+            )}
+          </Card>
 
-        <div className="flex gap-3 flex-1 min-h-0">
-          <div className="rounded-xl bg-slate-900/40 border border-slate-800 p-3 flex flex-col flex-[3] min-w-0">
-            <div className="text-sm text-slate-400 mb-1 px-1">Trajectoire du volume tumoral rehaussant</div>
-            {tl && <div className="flex-1 min-h-0"><VolumeChart exams={tl.exams} selected={sel} onSelect={setSel} /></div>}
-          </div>
-
-          <div className="rounded-xl bg-slate-900/40 border border-slate-800 p-3 flex flex-col flex-[2] min-w-0">
-            <div className="flex items-center justify-between mb-2 gap-2 flex-wrap">
-              <div className="text-sm text-slate-400">
-                {overlayMode ? 'Cerveau — superposition (évolution)' : exam ? `Cerveau — ${exam.week}` : 'Cerveau'}
-              </div>
+          <Card
+            title={overlayMode ? 'Cerveau — superposition de l’évolution' : exam ? `Cerveau — ${exam.week}` : 'Cerveau'}
+            right={
               <div className="flex gap-2">
                 <Toggle on={overlayMode} left="examen" right="superposition" onChange={setOverlayMode} />
                 {!overlayMode && <Toggle on={source === 'dataset'} left="notre modèle" right="dataset" onChange={(v) => setSource(v ? 'dataset' : 'custom')} />}
                 <Toggle on={render3d} left="2D" right="3D" onChange={setRender3d} />
               </div>
-            </div>
-            <div className="flex-1 min-h-0 rounded-lg overflow-hidden bg-black/40">
+            }>
+            <div className="h-[440px] rounded-lg overflow-hidden bg-black/40">
               {current && exam && (
                 <BrainViewer patient={current} week={exam.week} source={source} render3d={render3d}
                   overlay={overlayMode && overlay ? { ref: overlay.ref, layers } : null} />
               )}
             </div>
-            {overlayMode && layers.length > 0 && (
-              <div className="mt-2 flex items-center gap-2 flex-wrap text-[10px] text-slate-400">
-                <span className="text-slate-500">ancien</span>
-                {layers.map((l) => (
-                  <span key={l.week} className="px-1.5 py-0.5 rounded"
-                    style={{ background: `rgb(${l.rgb[0]},${l.rgb[1]},${l.rgb[2]})`, color: '#000' }}>{l.week.replace('week-', 'w')}</span>
-                ))}
-                <span className="text-slate-500">récent</span>
+            {overlayMode && measur.length > 0 && (
+              <div className="mt-3">
+                <div className="text-[10px] text-slate-500 mb-1">examens superposés — clic pour activer/désactiver · ancien → récent</div>
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  {measur.map((m, i) => {
+                    const [r, g, b] = timeColor(measur.length > 1 ? i / (measur.length - 1) : 0) as [number, number, number]
+                    const on = picked.has(m.week)
+                    return (
+                      <button key={m.week} onClick={() => toggleWeek(m.week)}
+                        className="px-1.5 py-0.5 rounded text-[10px] border transition"
+                        style={on
+                          ? { background: `rgb(${r},${g},${b})`, color: '#000', borderColor: `rgb(${r},${g},${b})` }
+                          : { background: 'transparent', color: `rgb(${r},${g},${b})`, borderColor: `rgba(${r},${g},${b},0.45)` }}>
+                        {m.week.replace('week-', 'w')}
+                      </button>
+                    )
+                  })}
+                </div>
               </div>
             )}
-          </div>
-        </div>
+          </Card>
 
-        <div className="flex gap-3">
           {exam && (
-            <div className="rounded-xl bg-slate-900/40 border border-slate-800 px-4 py-3 text-sm flex gap-5 items-center flex-1">
-              <div><span className="text-slate-500">examen </span><b>{exam.week}</b></div>
-              <div><span className="text-slate-500">volume </span><b>{exam.vol_custom} mL</b></div>
-              <div><span className="text-slate-500">auto </span><b style={{ color: VERDICT_COLOR[exam.verdict_auto] }}>{exam.verdict_auto}</b></div>
-              {exam.rano_expert && <div><span className="text-slate-500">expert </span><b>{exam.rano_expert}</b></div>}
-              <div className="text-slate-600">{exam.n_slices} coupes</div>
-            </div>
-          )}
-          {report && (
-            <div className="rounded-xl bg-slate-900/40 border border-slate-800 px-4 py-3 text-xs text-slate-300 whitespace-pre-line flex-[2]">
-              <div className="text-slate-500 uppercase text-[10px] mb-1">compte-rendu auto-généré</div>
-              {report}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+              <Card title="Examen sélectionné">
+                <div className="flex flex-col gap-2 text-sm">
+                  <div className="flex items-center justify-between"><span className="text-slate-500">semaine</span><b>{exam.week}</b></div>
+                  <div className="flex items-center justify-between"><span className="text-slate-500">volume rehaussant</span><b>{exam.vol_custom} mL</b></div>
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="text-slate-500">verdict auto</span>
+                    <b style={{ color: VERDICT_COLOR[exam.verdict_auto] }}>{exam.verdict_auto}</b>
+                  </div>
+                  {exam.verdict_why && <div className="text-xs text-slate-400 italic -mt-1">{exam.verdict_why}</div>}
+                  {exam.new_lesion && (
+                    <div className="self-start px-2 py-0.5 rounded-md text-xs font-semibold bg-red-500/15 text-red-300 border border-red-500/30">
+                      nouvelle lésion · {exam.new_vol} mL
+                    </div>
+                  )}
+                  <div className="flex items-center justify-between text-slate-600"><span>coupes</span><span>{exam.n_slices}</span></div>
+                </div>
+              </Card>
+
+              <Card title="Compte-rendu" right={
+                <div className="flex items-center gap-2">
+                  {edited && <span className="text-[10px] text-amber-400/80">modifié</span>}
+                  <span className="text-[10px] text-slate-500">éditable</span>
+                  <button onClick={copyReport} className="px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 text-[11px]">{copied ? 'copié' : 'copier'}</button>
+                  <button onClick={downloadReport} className="px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 text-[11px]">exporter</button>
+                </div>
+              }>
+                <textarea value={report} onChange={(e) => { setReport(e.target.value); setEdited(true) }}
+                  spellCheck={false}
+                  className="w-full min-h-[150px] resize-y bg-slate-950/60 text-slate-200 text-sm leading-relaxed outline-none border border-slate-700 focus:border-sky-500/50 rounded-lg p-3" />
+              </Card>
             </div>
           )}
         </div>
       </main>
+
+      {showAdd && <AddIrmModal onClose={() => setShowAdd(false)}
+        onCreated={(pid) => {
+          getPatients().then((ps) => { setPatients(ps.map((p) => p.id)); setCurrent(pid) })
+          setShowAdd(false)
+        }} />}
     </div>
   )
 }

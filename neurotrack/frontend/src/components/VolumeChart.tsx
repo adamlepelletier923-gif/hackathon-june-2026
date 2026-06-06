@@ -12,26 +12,42 @@ type Props = {
 export default function VolumeChart({ exams, selected, onSelect }: Props) {
   const ref = useRef<HTMLDivElement>(null)
   const chart = useRef<echarts.ECharts | null>(null)
+  const onSelectRef = useRef(onSelect)
+  onSelectRef.current = onSelect
 
   useEffect(() => {
     if (!ref.current) return
     chart.current = echarts.init(ref.current, undefined, { renderer: 'canvas' })
     const onResize = () => chart.current?.resize()
     window.addEventListener('resize', onResize)
+    const ro = new ResizeObserver(onResize)
+    ro.observe(ref.current)
     chart.current.on('click', (p: any) => {
-      if (typeof p.dataIndex === 'number') onSelect(p.dataIndex)
+      if (typeof p.dataIndex === 'number') onSelectRef.current(p.dataIndex)
     })
-    return () => { window.removeEventListener('resize', onResize); chart.current?.dispose() }
-  }, [onSelect])
+    return () => { window.removeEventListener('resize', onResize); ro.disconnect(); chart.current?.dispose() }
+  }, [])
 
   useEffect(() => {
     if (!chart.current) return
     const x = exams.map((e) => e.wn)
     const custom = exams.map((e) => e.vol_custom)
     const dataset = exams.map((e) => e.vol_dataset)
+    const refPoints: any[] = []
+    const bi = exams.findIndex((e) => e.is_baseline)
+    const ni = exams.findIndex((e) => e.is_nadir)
+    if (bi >= 0) refPoints.push({ name: 'baseline', xAxis: bi, yAxis: exams[bi].vol_custom, value: 'baseline',
+      itemStyle: { color: '#64748b' }, label: { color: '#cbd5e1', fontSize: 10 } })
+    if (ni >= 0 && ni !== bi) refPoints.push({ name: 'nadir', xAxis: ni, yAxis: exams[ni].vol_custom, value: 'nadir',
+      itemStyle: { color: '#22c55e' }, label: { color: '#86efac', fontSize: 10 } })
+    const newLesions = exams
+      .map((e, i) => ({ e, i }))
+      .filter(({ e }) => e.new_lesion)
+      .map(({ e, i }) => ({ name: 'nouvelle lésion', symbol: 'triangle', symbolSize: 16, xAxis: i, yAxis: e.vol_custom, value: 'lésion',
+        itemStyle: { color: '#ef4444' }, label: { color: '#fca5a5', fontSize: 10, position: 'bottom' } }))
     chart.current.setOption({
       backgroundColor: 'transparent',
-      grid: { left: 52, right: 24, top: 28, bottom: 40 },
+      grid: { left: 60, right: 24, top: 28, bottom: 40 },
       tooltip: {
         trigger: 'axis',
         backgroundColor: '#111827', borderColor: '#374151', textStyle: { color: '#e5e7eb' },
@@ -42,7 +58,7 @@ export default function VolumeChart({ exams, selected, onSelect }: Props) {
             `notre modèle : <b>${e.vol_custom} mL</b><br/>` +
             `dataset : ${e.vol_dataset} mL<br/>` +
             `verdict auto : <b style="color:${VERDICT_COLOR[e.verdict_auto] || '#aaa'}">${e.verdict_auto}</b>` +
-            (e.rano_expert ? `<br/>expert : ${e.rano_expert}` : '')
+            (e.verdict_why ? `<br/><span style="color:#94a3b8">${e.verdict_why}</span>` : '')
         },
       },
       xAxis: {
@@ -70,6 +86,10 @@ export default function VolumeChart({ exams, selected, onSelect }: Props) {
             color: (p: any) => VERDICT_COLOR[exams[p.dataIndex].verdict_auto] || '#38bdf8',
             borderColor: (p: any) => (p.dataIndex === selected ? '#fff' : 'transparent'),
             borderWidth: 2,
+          },
+          markPoint: {
+            symbol: 'pin', symbolSize: 38, data: [...refPoints, ...newLesions],
+            label: { formatter: (p: any) => p.data.value, position: 'top' },
           },
         },
       ],

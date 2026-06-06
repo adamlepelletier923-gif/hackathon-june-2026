@@ -9,9 +9,10 @@ type Props = {
   source: 'custom' | 'dataset'
   render3d: boolean
   overlay?: { ref: string; layers: Layer[] } | null
+  src?: { image: string; seg: string } | null
 }
 
-export default function BrainViewer({ patient, week, source, render3d, overlay }: Props) {
+export default function BrainViewer({ patient, week, source, render3d, overlay, src }: Props) {
   const canvas = useRef<HTMLCanvasElement>(null)
   const nv = useRef<Niivue | null>(null)
 
@@ -19,6 +20,9 @@ export default function BrainViewer({ patient, week, source, render3d, overlay }
     if (!canvas.current) return
     const n = new Niivue({ backColor: [0.04, 0.05, 0.09, 1], show3Dcrosshair: true, crosshairColor: [0.9, 0.9, 0.9, 0.4] })
     n.attachToCanvas(canvas.current)
+    n.opts.multiplanarShowRender = 1            // SHOW_RENDER.ALWAYS : la 3D reste visible meme en mode coupes
+    n.opts.multiplanarEqualSize = true          // tuiles de meme taille -> vues alignees
+    n.setMultiplanarLayout(2)                   // MULTIPLANAR_TYPE.GRID : 2x2 propre
     nv.current = n
   }, [])
 
@@ -26,7 +30,7 @@ export default function BrainViewer({ patient, week, source, render3d, overlay }
 
   useEffect(() => {
     const n = nv.current
-    if (!n || !patient) return
+    if (!n) return
 
     if (overlay && overlay.layers.length) {
       overlay.layers.forEach((l, i) => {
@@ -41,14 +45,14 @@ export default function BrainViewer({ patient, week, source, render3d, overlay }
       return
     }
 
-    if (!week) return
-    const base = `/nii/${patient}/${week}/image.nii.gz`
-    const seg = `/nii/${patient}/${week}/seg_${source}.nii.gz`
+    const base = src ? src.image : (week ? `/nii/${patient}/${week}/image.nii.gz` : '')
+    const seg = src ? src.seg : (week ? `/nii/${patient}/${week}/seg_${source}.nii.gz` : '')
+    if (!base) return
     n.loadVolumes([
       { url: base },
-      { url: seg, colormap: source === 'custom' ? 'blue' : 'red', opacity: 0.6, cal_min: 0.5, cal_max: 1 },
+      { url: seg, colormap: src || source === 'custom' ? 'blue' : 'red', opacity: 0.6, cal_min: 0.5, cal_max: 1 },
     ]).then(() => n.setSliceType(render3d ? n.sliceTypeRender : n.sliceTypeMultiplanar)).catch(() => {})
-  }, [patient, week, source, overlaySig])
+  }, [patient, week, source, overlaySig, src?.image])
 
   useEffect(() => {
     const n = nv.current
