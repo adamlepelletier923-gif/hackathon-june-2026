@@ -1,6 +1,7 @@
 numpy
 nibabel
 scipy
+SimpleITK
 remotezip
 matplotlib
 torch

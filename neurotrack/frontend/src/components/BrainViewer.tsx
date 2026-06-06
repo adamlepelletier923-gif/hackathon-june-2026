@@ -3,6 +3,24 @@ import { Niivue } from '@niivue/niivue'
 
 export type Layer = { url: string; rgb: [number, number, number]; week: string }
 
+function centerOnTumor(n: any) {
+  // recentre la vue sur le centroide du masque (volume 1) pour qu'on voie la tumeur en 2D
+  try {
+    const ov = n.volumes?.[1]
+    const img = ov?.img
+    const d = ov?.hdr?.dims
+    if (!img || !d) return
+    const nx = d[1], ny = d[2], nz = d[3]
+    let sx = 0, sy = 0, sz = 0, c = 0
+    for (let i = 0; i < img.length; i++) {
+      if (img[i] > 0) { const t = i % (nx * ny); sx += t % nx; sy += (t / nx) | 0; sz += (i / (nx * ny)) | 0; c++ }
+    }
+    if (!c) return
+    n.scene.crosshairPos = [sx / c / nx, sy / c / ny, sz / c / nz]
+    n.drawScene()
+  } catch { /* pas grave si l'API bouge */ }
+}
+
 type Props = {
   patient: string
   week: string
@@ -50,8 +68,11 @@ export default function BrainViewer({ patient, week, source, render3d, overlay, 
     if (!base) return
     n.loadVolumes([
       { url: base },
-      { url: seg, colormap: src || source === 'custom' ? 'blue' : 'red', opacity: 0.6, cal_min: 0.5, cal_max: 1 },
-    ]).then(() => n.setSliceType(render3d ? n.sliceTypeRender : n.sliceTypeMultiplanar)).catch(() => {})
+      { url: seg, colormap: src || source === 'custom' ? 'warm' : 'electric_blue', opacity: 0.9, cal_min: 0.5, cal_max: 1 },
+    ]).then(() => {
+      n.setSliceType(render3d ? n.sliceTypeRender : n.sliceTypeMultiplanar)
+      centerOnTumor(n)
+    }).catch(() => {})
   }, [patient, week, source, overlaySig, src?.image])
 
   useEffect(() => {

@@ -33,8 +33,10 @@ IRM (4 sequences) --> modele pre-entraine (MONAI BraTS) --> masque tumoral
 - Verdict RANO volumetrique simplifie sur le volume rehaussant (PD/SD/PR/CR), avec la
   raison affichee (hausse vs nadir, baisse vs baseline...). Ne lit que les volumes, jamais
   une cotation externe : tourne tel quel sur un patient jamais cote.
-- Detection d'apparition d'une nouvelle lesion rehaussante (composantes connexes en espace
-  atlas commun) -> declenche un PD, autre critere RANO independant du volume.
+- Superposition multi-dates et detection de nouvelle lesion calculees DANS l'app : le backend
+  recale nos masques entre examens (rigide, SimpleITK) puis cherche les composantes connexes
+  qui apparaissent (-> PD, critere RANO independant du volume). Meme resultat pour un patient
+  du cache ou ajoute in-app.
 
 ## Ajouter une IRM depuis l'app (segmentation in-app)
 
@@ -97,6 +99,7 @@ telechargement des 32 Go).
 ```
 backend/app.py        API FastAPI (timeline, verdict RANO, overlay, compte-rendu, segmentation in-app) + sert les .nii.gz
 backend/seg.py        segmentation par le modele MONAI dans le backend (chargement paresseux), a la demande
+backend/overlay.py    recalage inter-examens + superposition + detection de nouvelle lesion, in-app
 frontend/             app React (Vite + Tailwind + ECharts + NiiVue)
 segment.py            segmentation par modele pre-entraine + comparaison a la reference
 precompute_seg.py     segmente tous les examens d'un patient et met en cache

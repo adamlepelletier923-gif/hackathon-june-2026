@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { getPatients, getTimeline, getReport, getOverlay, timeColor, VERDICT_COLOR, VERDICT_LABEL } from './api'
+import { getPatients, getTimeline, getReport, getOverlay, deletePatient, timeColor, VERDICT_COLOR, VERDICT_LABEL } from './api'
 import type { Timeline, Overlay } from './api'
 import VolumeChart from './components/VolumeChart'
 import BrainViewer from './components/BrainViewer'
@@ -27,7 +27,7 @@ function Toggle({ on, left, right, onChange }: { on: boolean; left: string; righ
 
 function Card({ title, right, children }: { title: string; right?: React.ReactNode; children: React.ReactNode }) {
   return (
-    <section className="rounded-2xl bg-slate-900/40 border border-slate-800 p-4">
+    <section className="rounded-2xl bg-slate-900/50 backdrop-blur-sm border border-white/5 ring-1 ring-black/20 shadow-xl shadow-black/30 p-4">
       <div className="flex items-center justify-between mb-3 gap-2 flex-wrap">
         <h2 className="text-sm font-medium text-slate-300">{title}</h2>
         {right}
@@ -42,11 +42,11 @@ export default function App() {
   const [current, setCurrent] = useState<string | null>(null)
   const [tl, setTl] = useState<Timeline | null>(null)
   const [sel, setSel] = useState(0)
-  const [source, setSource] = useState<'custom' | 'dataset'>('custom')
   const [render3d, setRender3d] = useState(false)
   const [report, setReport] = useState('')
   const [overlay, setOverlay] = useState<Overlay | null>(null)
   const [overlayMode, setOverlayMode] = useState(false)
+  const [overlayLoading, setOverlayLoading] = useState(false)
   const [playing, setPlaying] = useState(false)
   const [edited, setEdited] = useState(false)
   const [copied, setCopied] = useState(false)
@@ -63,17 +63,24 @@ export default function App() {
   useEffect(() => {
     if (!current) return
     setPlaying(false)
+    setOverlayMode(false)
+    setOverlay(null)
     getTimeline(current).then((t) => {
       setTl(t)
       setSel(Math.max(t.exams.length - 1, 0))
     })
-    getOverlay(current).then(setOverlay).catch(() => setOverlay(null))
   }, [current])
+
+  useEffect(() => {
+    if (!overlayMode || !current || overlay) return
+    setOverlayLoading(true)
+    getOverlay(current).then(setOverlay).catch(() => setOverlay(null)).finally(() => setOverlayLoading(false))
+  }, [overlayMode, current, overlay])
 
   useEffect(() => {
     if (!playing || !tl) return
     if (sel >= tl.exams.length - 1) { setPlaying(false); return }
-    const id = setTimeout(() => setSel((i) => i + 1), 850)
+    const id = setTimeout(() => setSel((i) => i + 1), 1100)
     return () => clearTimeout(id)
   }, [playing, sel, tl])
 
@@ -83,6 +90,19 @@ export default function App() {
     setPlaying((p) => !p)
   }
   const stepTo = (i: number) => { setPlaying(false); setSel(i) }
+
+  const removePatient = async (pid: string) => {
+    if (!window.confirm(`Supprimer définitivement ${pid} ? Cette action est irréversible.`)) return
+    await deletePatient(pid).catch(() => {})
+    const ps = await getPatients()
+    const ids = ps.map((p) => p.id)
+    setPatients(ids)
+    if (current === pid) {
+      const next = ids[0] ?? null
+      setCurrent(next)
+      if (!next) { setTl(null); setReport('') }
+    }
+  }
 
   const s = tl?.summary
   const exam = tl?.exams[sel]
@@ -128,8 +148,9 @@ export default function App() {
 
   const vd = exam?.verdict_auto
   return (
-    <div className="flex h-screen bg-slate-950 text-slate-100">
-      <aside className="w-60 shrink-0 border-r border-slate-800 bg-slate-950 p-4 flex flex-col gap-4">
+    <div className="flex h-screen text-slate-100 bg-slate-950"
+      style={{ background: 'radial-gradient(1200px 600px at 78% -8%, rgba(56,189,248,0.10), transparent 60%), radial-gradient(900px 500px at 0% 100%, rgba(99,102,241,0.10), transparent 55%), #060912' }}>
+      <aside className="w-60 shrink-0 border-r border-white/5 bg-slate-950/60 backdrop-blur-sm p-4 flex flex-col gap-4">
         <div>
           <div className="text-lg font-bold tracking-tight">Neuro<span className="text-sky-400">Track</span></div>
           <div className="text-[11px] text-slate-500">suivi tumoral assisté</div>
@@ -137,11 +158,15 @@ export default function App() {
         <div className="flex flex-col gap-1">
           <div className="text-xs uppercase text-slate-500 mb-1">Patients</div>
           {patients.map((p) => (
-            <button key={p} onClick={() => setCurrent(p)}
-              className={`text-left px-3 py-2 rounded-lg text-sm transition ${
-                p === current ? 'bg-sky-500/15 text-sky-300 border border-sky-500/30' : 'hover:bg-slate-900 text-slate-300 border border-transparent'}`}>
-              {p}
-            </button>
+            <div key={p} className="group flex items-center gap-1">
+              <button onClick={() => setCurrent(p)}
+                className={`flex-1 text-left px-3 py-2 rounded-lg text-sm transition ${
+                  p === current ? 'bg-sky-500/15 text-sky-300 border border-sky-500/30' : 'hover:bg-slate-900 text-slate-300 border border-transparent'}`}>
+                {p}
+              </button>
+              <button onClick={() => removePatient(p)} title="supprimer définitivement"
+                className="shrink-0 px-1.5 py-1 rounded-md text-slate-600 hover:text-red-400 hover:bg-red-500/10 opacity-0 group-hover:opacity-100 transition">🗑</button>
+            </div>
           ))}
           {!patients.length && <div className="text-xs text-slate-600">chargement…</div>}
         </div>
@@ -159,8 +184,13 @@ export default function App() {
               <div className="text-sm text-slate-500">{s ? `${s.n_exams} examens de suivi` : ''}{exam ? ` · examen ${exam.week}` : ''}</div>
             </div>
             {vd && (
-              <div className="px-5 py-2.5 rounded-xl font-bold tracking-wide"
-                style={{ background: (VERDICT_COLOR[vd] || '#444') + '22', color: VERDICT_COLOR[vd] || '#fff', border: `1px solid ${VERDICT_COLOR[vd] || '#444'}55` }}>
+              <div className="px-5 py-2.5 rounded-xl font-bold tracking-wide transition-all"
+                style={{
+                  background: `linear-gradient(135deg, ${VERDICT_COLOR[vd] || '#444'}33, ${VERDICT_COLOR[vd] || '#444'}14)`,
+                  color: VERDICT_COLOR[vd] || '#fff',
+                  border: `1px solid ${VERDICT_COLOR[vd] || '#444'}66`,
+                  boxShadow: `0 0 22px ${VERDICT_COLOR[vd] || '#444'}55, inset 0 0 12px ${VERDICT_COLOR[vd] || '#444'}22`,
+                }}>
                 {VERDICT_LABEL[vd] || vd}
               </div>
             )}
@@ -170,7 +200,7 @@ export default function App() {
             <div className="flex gap-4">
               <Kpi label="volume" value={`${exam.vol_custom} mL`} sub="tumeur rehaussante" />
               <Kpi label="variation" value={exam.delta_pct == null ? '—' : `${exam.delta_pct > 0 ? '+' : ''}${exam.delta_pct}%`} sub="vs examen précédent"
-                color={exam.delta_pct != null && exam.delta_pct > 0 ? '#ef4444' : exam.delta_pct != null ? '#22c55e' : undefined} />
+                color={exam.delta_pct != null && exam.delta_pct > 0 ? VERDICT_COLOR.PD : exam.delta_pct != null ? VERDICT_COLOR.PR : undefined} />
               <Kpi label="vitesse" value={exam.velocity == null ? '—' : `${exam.velocity} mL/mois`} sub="croissance récente" />
               <Kpi label="pic du suivi" value={s ? `${s.peak_vol} mL` : '—'} sub={s?.peak_week} />
             </div>
@@ -179,7 +209,9 @@ export default function App() {
           {tl && tl.exams.length > 0 && (
             <div className="flex items-center gap-3 rounded-xl bg-slate-900/60 border border-slate-800 px-4 py-2.5">
               <button onClick={togglePlay}
-                className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-sky-500/20 text-sky-200 border border-sky-500/30 text-sm font-medium hover:bg-sky-500/30">
+                className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border text-sm font-medium transition-all ${
+                  playing ? 'bg-sky-400/30 text-sky-100 border-sky-300/50 shadow-[0_0_18px_rgba(56,189,248,0.6)] animate-pulse'
+                          : 'bg-sky-500/20 text-sky-200 border-sky-500/30 hover:bg-sky-500/30'}`}>
                 <span className="text-xs">{playing ? '❚❚' : '▶'}</span>{playing ? 'Pause' : 'Lecture'}
               </button>
               <button onClick={() => stepTo(Math.max(0, sel - 1))} disabled={sel === 0}
@@ -192,28 +224,23 @@ export default function App() {
             </div>
           )}
 
-          <Card title="Trajectoire du volume tumoral rehaussant et réponse RANO">
-            {tl && (
-              <>
-                <div className="h-[340px]"><VolumeChart exams={tl.exams} selected={sel} onSelect={stepTo} /></div>
-                <div className="mt-2"><RanoRibbon exams={tl.exams} selected={sel} onSelect={stepTo} /></div>
-              </>
-            )}
-          </Card>
-
           <Card
             title={overlayMode ? 'Cerveau — superposition de l’évolution' : exam ? `Cerveau — ${exam.week}` : 'Cerveau'}
             right={
               <div className="flex gap-2">
                 <Toggle on={overlayMode} left="examen" right="superposition" onChange={setOverlayMode} />
-                {!overlayMode && <Toggle on={source === 'dataset'} left="notre modèle" right="dataset" onChange={(v) => setSource(v ? 'dataset' : 'custom')} />}
                 <Toggle on={render3d} left="2D" right="3D" onChange={setRender3d} />
               </div>
             }>
-            <div className="h-[440px] rounded-lg overflow-hidden bg-black/40">
+            <div className="h-[520px] rounded-lg overflow-hidden bg-black/40 ring-1 ring-white/5 relative">
               {current && exam && (
-                <BrainViewer patient={current} week={exam.week} source={source} render3d={render3d}
+                <BrainViewer patient={current} week={exam.week} source="custom" render3d={render3d}
                   overlay={overlayMode && overlay ? { ref: overlay.ref, layers } : null} />
+              )}
+              {overlayMode && overlayLoading && (
+                <div className="absolute inset-0 flex items-center justify-center bg-black/60 text-sky-200 text-sm animate-pulse">
+                  recalage des examens et superposition en cours…
+                </div>
               )}
             </div>
             {overlayMode && measur.length > 0 && (
@@ -235,6 +262,15 @@ export default function App() {
                   })}
                 </div>
               </div>
+            )}
+          </Card>
+
+          <Card title="Trajectoire du volume tumoral rehaussant et réponse RANO">
+            {tl && (
+              <>
+                <div className="h-[340px]"><VolumeChart exams={tl.exams} selected={sel} onSelect={stepTo} /></div>
+                <div className="mt-2"><RanoRibbon exams={tl.exams} selected={sel} onSelect={stepTo} /></div>
+              </>
             )}
           </Card>
 

@@ -10,6 +10,7 @@ data/seg_cache/
 data/cmp_cache/*/*.npz
 data/cmp_cache/*/*.npz.json
 data/web_nii/_live/
+data/web_nii/*/_overlay_our/
 data/evolution_*/
 data/namelist.json
 data/*.png

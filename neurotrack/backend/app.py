@@ -1,4 +1,4 @@
-import os, re, json, uuid, tempfile
+import os, re, json, uuid, tempfile, shutil
 import pandas as pd
 from fastapi import FastAPI, HTTPException, UploadFile, File, Form
 from fastapi.middleware.cors import CORSMiddleware
@@ -45,8 +45,16 @@ def verdict(vol, baseline, nadir):
     return "SD", "variation sous les seuils de reponse ou de progression"
 
 def load_new_lesions(pid):
-    p = os.path.join(NII, pid, "_overlay", "new_lesions.json")
+    p = os.path.join(NII, pid, "_overlay_our", "new_lesions.json")
     return json.load(open(p)) if os.path.exists(p) else {}
+
+def ensure_overlay(pid):
+    # calcule recalage + nouvelles lesions dans l'app (mis en cache), sans casser si les deps manquent
+    try:
+        from backend import overlay as ov
+        ov.ensure(pid, NII, CMP)
+    except Exception:
+        pass
 
 def list_patients():
     if not os.path.isdir(CMP):
@@ -57,6 +65,18 @@ def list_patients():
 def patients():
     return [{"id": p} for p in list_patients()]
 
+@app.delete("/api/patients/{pid}")
+def delete_patient(pid: str):
+    pid = _safe_id(pid)
+    removed = False
+    for d in (os.path.join(CMP, pid), os.path.join(NII, pid)):
+        if os.path.isdir(d):
+            shutil.rmtree(d, ignore_errors=True)
+            removed = True
+    if not removed:
+        raise HTTPException(404, "patient inconnu")
+    return {"deleted": pid}
+
 @app.get("/api/patients/{pid}/timeline")
 def timeline(pid: str):
     man_path = os.path.join(CMP, pid, "manifest.json")
@@ -65,6 +85,7 @@ def timeline(pid: str):
     man = json.load(open(man_path))
     weeks = sorted(man, key=wnum)
     has_nii = os.path.isdir(os.path.join(NII, pid))
+    ensure_overlay(pid)
     newles = load_new_lesions(pid)
 
     rows = []
@@ -120,15 +141,19 @@ def timeline(pid: str):
 
 @app.get("/api/patients/{pid}/overlay")
 def overlay(pid: str):
-    p = os.path.join(NII, pid, "_overlay", "overlay.json")
-    if not os.path.exists(p):
-        raise HTTPException(404, "pas de superposition pour ce patient")
-    rows = json.load(open(p))
+    # superposition calculee dans l'app a partir de NOS masques (recalage inter-examens), mise en cache
+    if not os.path.exists(os.path.join(CMP, pid, "manifest.json")):
+        raise HTTPException(404, "patient inconnu")
+    od = os.path.join(NII, pid, "_overlay_our")
+    ensure_overlay(pid)
+    if not os.path.exists(os.path.join(od, "overlay.json")):
+        raise HTTPException(503, "superposition indisponible (dependances de recalage manquantes)")
+    rows = json.load(open(os.path.join(od, "overlay.json")))
     return {
         "patient": pid,
-        "ref": f"/nii/{pid}/_overlay/ref.nii.gz",
+        "ref": f"/nii/{pid}/_overlay_our/ref.nii.gz",
         "masks": [{"week": r["week"], "wn": r["wn"], "vol": r["vol"],
-                   "url": f"/nii/{pid}/_overlay/enh_{r['week']}.nii.gz"} for r in rows],
+                   "url": f"/nii/{pid}/_overlay_our/enh_{r['week']}.nii.gz"} for r in rows],
     }
 
 SEQ = ["CT1_r2s_bet_reg.nii.gz", "T1_r2s_bet_reg.nii.gz", "T2_r2s_bet_reg.nii.gz", "FLAIR_r2s_bet_reg.nii.gz"]
@@ -157,6 +182,7 @@ def _persist_seg(pid, week_key, paths):
     man = json.load(open(mpath)) if os.path.exists(mpath) else {}
     man[week_key] = {"week": week_key, "n_slices": res["n_slices"], "vol_our": res["vol"], "vol_gt": 0.0}
     json.dump(man, open(mpath, "w"), indent=1)
+    shutil.rmtree(os.path.join(NII, pid, "_overlay_our"), ignore_errors=True)  # cache perime, a recalculer
     return {"patient": pid, "week": week_key, "n_exams": len(man), **res}
 
 def _week_key(week):

@@ -32,7 +32,7 @@ export type Summary = {
 export type Timeline = { patient: string; summary: Summary | null; exams: Exam[] }
 
 export const VERDICT_COLOR: Record<string, string> = {
-  PD: '#ef4444', SD: '#f59e0b', PR: '#22c55e', CR: '#3b82f6',
+  PD: '#ff4d6d', SD: '#fbbf24', PR: '#34d399', CR: '#38bdf8',
 }
 export const VERDICT_LABEL: Record<string, string> = {
   PD: 'PROGRESSION', SD: 'STABLE', PR: 'RÉPONSE PARTIELLE', CR: 'RÉPONSE COMPLÈTE',
@@ -46,6 +46,11 @@ export async function getPatients(): Promise<{ id: string }[]> {
 export async function getTimeline(id: string): Promise<Timeline> {
   const r = await fetch(`/api/patients/${id}/timeline`)
   return r.json()
+}
+
+export async function deletePatient(id: string): Promise<void> {
+  const r = await fetch(`/api/patients/${id}`, { method: 'DELETE' })
+  if (!r.ok) throw new Error('suppression impossible')
 }
 
 export type OverlayMask = { week: string; wn: number; vol: number; url: string }

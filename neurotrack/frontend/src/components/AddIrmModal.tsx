@@ -25,7 +25,8 @@ export default function AddIrmModal({ onClose, onCreated }: { onClose: () => voi
 
   const runSeries = async () => {
     setBusy(true); setErr(''); setRes(null)
-    try { const s = await segmentExampleSeries(name.trim() || undefined); onCreated(s.patient) }
+    const pid = name.trim() || `Demo-${Math.random().toString(36).slice(2, 6)}`
+    try { const s = await segmentExampleSeries(pid); onCreated(s.patient) }
     catch (e: any) { setErr(e.message || 'erreur') }
     finally { setBusy(false) }
   }
@@ -79,7 +80,7 @@ export default function AddIrmModal({ onClose, onCreated }: { onClose: () => voi
           {busy && <span className="text-xs text-sky-300 animate-pulse">segmentation en cours… (le suivi complet prend ~30s)</span>}
           {err && <span className="text-xs text-red-400">{err}</span>}
         </div>
-        <div className="text-[11px] text-slate-600">pour un upload : renseigne un nom et une semaine, puis les 4 séquences. L’exemple (suivi complet) marche sans rien remplir et crée un patient avec sa courbe.</div>
+        <div className="text-[11px] text-slate-600">pour un upload : renseigne un nom et une semaine, puis les 4 séquences. L’exemple (suivi complet) réutilise des IRM existantes pour la démo et crée un patient distinct (nom auto si vide) — supprimable ensuite.</div>
 
         {res && (
           <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 p-3 flex items-center justify-between gap-3">
